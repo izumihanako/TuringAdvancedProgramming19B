@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Function.h"
 
@@ -45,20 +46,21 @@ class SDDG
 {
 private:
     Function *mFunc;
-    map<Instruction *, SDDGNode *> mNodes;
-    map<Instruction *, SDDGNode *> mInterestingNodes;
+    DenseMap<Instruction *, SDDGNode *> mNodes;
+    DenseMap<Instruction *, SDDGNode *> mInterestingNodes;
     set<pair<Instruction *, Instruction *>> mShares;
     bool share(Instruction *fst, Instruction *snd);
 
 public:
+    SDDG() {}
     SDDG(Function *func) : mFunc(func) {}
-    ~SDDG();
+    ~SDDG() = default ;
     // 创建数据依赖图及数据共享关系
     void buildSDDG();
     // 将数据依赖图中的无关元素去除，仅保留所关注的元素
     void flattenSDDG();
     // 基于LLVM IR的信息，不做任何概念上的改变，创建数据依赖图
-    void buildLegacySDDG();
+    //void buildLegacySDDG();
     // 提供将数据依赖图转化为dot文件的方法，对于将字符串映射为整数之后，如何转化，请自行设计实现。
     // 参数指示是否将“数据共享关系”输出到dot文件中。
     // 获得dot文件后（加上名为Test_func.dot，执行命令：dot -Tpng -o a.png Test_func.dot可生成相应
