@@ -7,6 +7,7 @@
 #include <string>
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Function.h"
 

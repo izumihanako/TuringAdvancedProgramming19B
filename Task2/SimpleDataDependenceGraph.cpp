@@ -413,6 +413,8 @@ void SDDG::buildSDDG() {
     ////////////////////////////
 
     //初始化每个BasicBlock的Definition和Use，并将块内的关系加边
+ //   int clock1 = std::clock();
+
     for (auto bbIter = mFunc->begin(); bbIter != mFunc->end(); bbIter++) {
         BasicBlock &bb = *bbIter;
         bbGen[&bb] = new DenseMap<Value *, set<Instruction *> *>;
@@ -449,9 +451,12 @@ void SDDG::buildSDDG() {
                 if (!curInst->use_empty() && !nOprands) continue;
                 for (int idx = 0; idx < (int)nOprands; idx++) {
                     Value *op = curInst->getOperand(idx);
+                    if (!isa<Argument>(op) && !isa<Instruction>(op)) continue;
                     if (!bbDef->getDef(op)) {
                         bbUse->createUse(op, curInst);
                     } else {  // 能够直接获取块内定义，加边
+                        assert(mNodes[curInst] != nullptr);
+                        assert(mNodes[bbDef->getDef(op)] != nullptr);
                         mNodes[curInst]->addPredecessor(mNodes[bbDef->getDef(op)]);
                         mNodes[bbDef->getDef(op)]->addSuccessor(mNodes[curInst]);
                     }
@@ -474,6 +479,8 @@ void SDDG::buildSDDG() {
                 if (!curInst->use_empty()) {  //被使用过，是一个定义
                     Value *lvalue = dyn_cast<Value>(curInst);
                     bbDef->define(lvalue, curInst);
+                    // 一旦被使用过，我们认为它是一个定义，立刻加点
+                    mNodes[curInst] = new SDDGNode(curInst);
                 }
                 int nOprands = curInst->getNumOperands(), ok = 0;
                 for (int idx = 0; idx < nOprands; idx++) {
@@ -484,7 +491,8 @@ void SDDG::buildSDDG() {
                     }
                 }
                 if (!ok) continue;
-                mNodes[curInst] = new SDDGNode(curInst);
+                // 如果没有定义，但有使用参数，我们仍为其ji
+                if (!mNodes.count(curInst)) mNodes[curInst] = new SDDGNode(curInst);
                 for (int idx = 0; idx < nOprands; idx++) {
                     Value *op = curInst->getOperand(idx);
                     if (!isa<Argument>(op) && !isa<Instruction>(op)) continue;
@@ -498,7 +506,6 @@ void SDDG::buildSDDG() {
             }
         }
     }
-
     //初始化每个BasicBlock的Gen和初始的Out集合
     for (auto bbIter = mFunc->begin(); bbIter != mFunc->end(); bbIter++) {
         BasicBlock &bb = *bbIter;
@@ -514,6 +521,9 @@ void SDDG::buildSDDG() {
             (*bbOut[&bb])[defIter.first]->insert(defIter.second);
         }
     }
+
+//    errs() << "preWork: " << 1.0 * (std::clock() - clock1) / CLOCKS_PER_SEC << "\n";
+ //   clock1 = std::clock();
 
     //迭代数据流算法
     queue<BasicBlock *> bbQueue;
@@ -533,16 +543,16 @@ void SDDG::buildSDDG() {
                 for (auto preBBit = pred_begin(curBB), endBBit = pred_end(curBB); preBBit != endBBit; ++preBBit) {
                     BasicBlock *preBB = *preBBit;
                     dfa::mergeTwoMaps(*bbIn[curBB], *bbOut[preBB]);  // 合并前驱的Out到当前的In
-                    DenseMap<Value *, set<Instruction *> *> tmpOut(*(bbOut[preBB]));
-                    //检查Out(pre)的所有 Instruction 是否被重定义
-                    for (auto tmpDef : *bbOut[preBB]) {  // 寻找是否被重定义，如果有，则被kill
-                        Value *lvalue = tmpDef.first;
-                        if (sDfaDefs[curBB]->getDef(lvalue) != nullptr) {
-                            tmpOut.erase(tmpDef.first);
-                        }
-                    }
-                    changed |= dfa::mergeTwoMaps(*bbOut[curBB], tmpOut);
                 }
+                DenseMap<Value *, set<Instruction *> *> tmpOut(*(bbIn[curBB]));
+
+                for (auto tmpDef : tmpOut) {  // 寻找是否被重定义，如果有，则被kill
+                    Value *lvalue = tmpDef.first;
+                    if (sDfaDefs[curBB]->getDef(lvalue) != nullptr) {
+                        tmpOut.erase(tmpDef.first);
+                    }
+                }
+                changed |= dfa::mergeTwoMaps(*bbOut[curBB], tmpOut);
                 changed |= dfa::mergeTwoMaps(*bbOut[curBB], *bbGen[curBB]);
             }
             // 将当前BasicBlock的未访问过的后继加入队列
@@ -555,6 +565,9 @@ void SDDG::buildSDDG() {
             }
         }
     }
+
+ //   errs() << "diedai: " << 1.0 * (std::clock() - clock1) / CLOCKS_PER_SEC << "\n";
+  //  clock1 = std::clock();
     //加边
     for (auto bbIter = mFunc->begin(); bbIter != mFunc->end(); bbIter++) {
         BasicBlock *bb = dyn_cast<BasicBlock>(bbIter);
@@ -571,6 +584,10 @@ void SDDG::buildSDDG() {
             }
         }
     }
+
+//    errs() << "last add edge: " << 1.0 * (std::clock() - clock1) / CLOCKS_PER_SEC << "\n";
+ //   clock1 = std::clock();
+
     // 以下是创建数据共享关系的代码，其中有一处需要同学们自行处理，所依赖的mergeTwoMaps函数需要
     // 同学们去实现。
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -802,7 +819,7 @@ void SDDG::buildSDDG() {
         }
     }
     for (auto it : sDfaDefs) {  // DenseMap<BasicBlock *, dfa::Definition *> sDfaDefs;
-        if (it.second != nullptr) 
+        if (it.second != nullptr)
             delete it.second;
     }
     for (auto it : sDfaUses) {  // DenseMap<BasicBlock *, dfa::Use *> sDfaUses;

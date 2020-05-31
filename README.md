@@ -1,3 +1,7 @@
-# 高级程序设计II 实验作业
+# Turing Advanced Programming II
 
-这个仓库维护了2020年春季学期《高级程序设计II》的课程任务与实验作业。
+This is the GitHub repository for Turing Class 2019's Advanced Programming II lecture's tasks. 
+
+Co-authored-by: wangyuansen <wangyuansen@outlook.com>
+
+Co-authored-by: fpdqwq <fpdqwq@yeah.net>
